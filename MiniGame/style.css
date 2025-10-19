@@ -1,0 +1,110 @@
+body { margin: 0; overflow: hidden; background: #111; font-family: monospace; }
+video { display: none; }
+canvas {
+  position: fixed;
+  top: 0; left: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+#hud {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  justify-content: space-between;
+  width: 400px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 2px solid #00e0ff;
+  box-shadow: 0 0 15px #00e0ff88;
+  border-radius: 12px;
+  padding: 10px 20px;
+  font-size: 20px;
+  color: #0ff;
+  text-shadow: 0 0 5px #00e0ff;
+  z-index: 10;
+  display: none;
+}  
+/* Menu Inicial */
+#menu {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.95);
+  color: #fff;
+  display:flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align:center;
+  z-index: 20;
+}
+#menu h1 {
+  font-size: 52px;
+  margin-bottom: 20px;
+  color: #00e0ff;
+  text-shadow: 0 0 15px #00e0ff;
+}
+  #menu p {
+  font-size: 20px;
+  max-width: 600px;
+  line-height: 1.5;
+  margin-bottom: 40px;
+  color: #ccc;
+  }
+  #startBtn {
+  padding: 14px 30px;
+  background: linear-gradient(90deg, #00e0ff, #007bff);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 22px;
+  font-weight: 600;
+  transition: 0.3s;
+}
+#startBtn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 20px #00e0ff;
+}
+/* Contador */
+#countdown {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 100px;
+  color: #00e0ff;
+  text-shadow: 0 0 20px #00e0ff;
+  display: none;
+  z-index: 30;
+}
+#gameOver {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.9);
+  color: #fff;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  z-index: 20;
+}
+#scoreText {
+  font-size: 28px;
+  margin-bottom: 30px;
+}
+#restartBtn {
+  padding: 12px 26px;
+  background: linear-gradient(90deg, #00e0ff, #007bff);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 20px;
+  transition: 0.3s;
+}
+#restartBtn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 20px #00e0ff;
+}
