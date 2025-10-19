@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<title>Mini Game: Esmague Bolinhas (Arena)</title>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<video id="video" autoplay></video>
+<canvas id="canvas"></canvas>
+
+<div id="hud">
+  <div id="hud-timer">🕒 30s</div>
+  <div id="hud-score">💥 0</div>
+</div>
+<!-- Menu Inicial -->
+<div id="menu">
+  <h1>💥 Esmague as Bolinhas!</h1>
+  <p>Use sua mão para controlar o cursor verde.<br>
+  Aproximar o polegar e o indicador ativa o clique.<br>
+  Estoure todas as bolinhas que conseguir antes do tempo acabar!</p>
+  <button id="startBtn">Iniciar</button>
+</div>
+
+<!-- Contador regressivo -->
+<div id="countdown"></div>
+
+<!-- Tela de fim de jogo -->
+<div id="gameOver">
+  <div id="scoreText"></div>
+  <button id="restartBtn">Reiniciar</button>
+</div>
+
+<script src="server.js"></script>
+</body>
+</html>
