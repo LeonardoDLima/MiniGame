@@ -1,7 +1,7 @@
 /* -------------------------
    Config e elementos DOM
    ------------------------- */
-   const socket = io();
+   const socket = io?.(); // se não usar socket, ok (proteção)
    const video = document.getElementById('video');
    const canvas = document.getElementById('canvas');
    const ctx = canvas.getContext('2d');
@@ -44,49 +44,47 @@
       Som (explosão via WebAudio)
       ------------------------- */
    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-   function playExplosion() {
-     const now = audioCtx.currentTime;
+   function playExplosion(){
+     try {
+       const now = audioCtx.currentTime;
    
-     // 🔹 Ruído principal da explosão
-     const noiseBufferSize = Math.floor(audioCtx.sampleRate * 0.25);
-     const noiseBuffer = audioCtx.createBuffer(1, noiseBufferSize, audioCtx.sampleRate);
-     const noiseData = noiseBuffer.getChannelData(0);
-     for (let i = 0; i < noiseBufferSize; i++) {
-       noiseData[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / noiseBufferSize, 2);
+       const noiseBufferSize = Math.floor(audioCtx.sampleRate * 0.18);
+       const noiseBuffer = audioCtx.createBuffer(1, noiseBufferSize, audioCtx.sampleRate);
+       const noiseData = noiseBuffer.getChannelData(0);
+       for (let i = 0; i < noiseBufferSize; i++) {
+         noiseData[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / noiseBufferSize, 2);
+       }
+       const noise = audioCtx.createBufferSource();
+       noise.buffer = noiseBuffer;
+   
+       const filter = audioCtx.createBiquadFilter();
+       filter.type = 'lowpass';
+       filter.frequency.value = 700;
+   
+       const gain = audioCtx.createGain();
+       gain.gain.setValueAtTime(0.8, now);
+       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+   
+       const osc = audioCtx.createOscillator();
+       osc.type = 'sine';
+       osc.frequency.setValueAtTime(120, now);
+       osc.frequency.exponentialRampToValueAtTime(40, now + 0.32);
+       const oscGain = audioCtx.createGain();
+       oscGain.gain.setValueAtTime(0.5, now);
+       oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+   
+       noise.connect(filter).connect(gain).connect(audioCtx.destination);
+       osc.connect(oscGain).connect(audioCtx.destination);
+   
+       noise.start(now);
+       osc.start(now);
+       noise.stop(now + 0.32);
+       osc.stop(now + 0.32);
+     } catch(e){
+       // se WebAudio não disponível, ignora silenciosamente
+       console.warn("Audio failed:", e);
      }
-     const noise = audioCtx.createBufferSource();
-     noise.buffer = noiseBuffer;
-   
-     // 🔹 Filtro passa-baixa — dá corpo ao som
-     const filter = audioCtx.createBiquadFilter();
-     filter.type = 'lowpass';
-     filter.frequency.value = 500;
-   
-     // 🔹 Ganho para controlar o volume
-     const gain = audioCtx.createGain();
-     gain.gain.setValueAtTime(100, now);
-     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-   
-     // 🔹 Subgrave curto (boom)
-     const osc = audioCtx.createOscillator();
-     osc.type = 'sine';
-     osc.frequency.setValueAtTime(100, now);
-     osc.frequency.exponentialRampToValueAtTime(40, now + 0.35);
-     const oscGain = audioCtx.createGain();
-     oscGain.gain.setValueAtTime(0.8, now);
-     oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-   
-     // 🔹 Conexões
-     noise.connect(filter).connect(gain).connect(audioCtx.destination);
-     osc.connect(oscGain).connect(audioCtx.destination);
-   
-     // 🔹 Toca ambos
-     noise.start(now);
-     osc.start(now);
-     noise.stop(now + 0.35);
-     osc.stop(now + 0.35);
    }
-   
    
    /* -------------------------
       Partículas
@@ -119,7 +117,7 @@
      particles.forEach(p=>{
        ctx.beginPath();
        ctx.arc(p.x,p.y,p.r,0,2*Math.PI);
-       ctx.fillStyle = `rgba(${hexToRgb(p.color)},${p.alpha})`;
+       ctx.fillStyle = `rgba(${hexToRgb(p.color)},${Math.max(0,p.alpha)})`;
        ctx.fill();
      });
    }
@@ -149,10 +147,9 @@
      const a = arena;
      for(let i=0;i<TOTAL_BALLS;i++){
        const r = 18 + Math.random()*18;
-       // posições dentro da arena (considerando raio)
        const x = a.x + r + Math.random()*(a.w - 2*r);
        const y = a.y + r + Math.random()*(a.h - 2*r);
-       const speed = 1 + Math.random()*2.5;
+       const speed = 1 + Math.random()*2.2;
        const ang = Math.random()*Math.PI*2;
        balls.push({ x, y, r, dx: Math.cos(ang)*speed, dy: Math.sin(ang)*speed, alive: true });
      }
@@ -175,7 +172,6 @@
        if(!b.alive) return;
        b.x += b.dx;
        b.y += b.dy;
-       // colisão com as bordas da arena (considera raio)
        if(b.x - b.r < a.x){
          b.x = a.x + b.r;
          b.dx *= -1;
@@ -221,6 +217,8 @@
      gameRunning = false;
      clearInterval(timerInterval);
      gameOverDiv.style.display = 'flex';
+     hud.style.display = 'none';
+     stopCameraMP(); // para câmera quando acabar
      if(allPopped){
        scoreText.innerHTML = `🎉 Parabéns! Você estourou todas as bolinhas!<br>Total: ${score}`;
      } else {
@@ -242,7 +240,7 @@
        if(dist < b.r){
          b.alive = false;
          score++;
-         playExplosion();
+         try { playExplosion(); } catch(e){/* ignore */ }
          createParticles(b.x, b.y);
        }
      });
@@ -257,6 +255,7 @@
    let smoothY = screenHeight/2;
    let clickFrames = 0;
    
+   // instância do Hands
    const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
    hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
    
@@ -279,7 +278,7 @@
        camX = Math.min(Math.max(camX, 0 - margin), 1 + margin);
        camY = Math.min(Math.max(camY, 0 - margin), 1 + margin);
    
-       // caso precise inverter X, troque por (1 - camX) * screenWidth
+       // converter para coordenadas da tela (espelha no eixo X)
        mouseX = (1 - camX) * screenWidth;
        mouseY = camY * screenHeight;
    
@@ -287,11 +286,11 @@
        smoothX += (mouseX - smoothX) * 0.25;
        smoothY += (mouseY - smoothY) * 0.25;
    
-       // pinch detect
+       // pinch detect (ajustado)
        const distClick = Math.hypot(indexTip.x - thumbTip.x, indexTip.y - thumbTip.y);
        if(distClick < 0.06){
          clickFrames++;
-         if(clickFrames >= 5) clickActive = true;
+         if(clickFrames >= 4) clickActive = true;
        } else {
          clickFrames = 0;
          clickActive = false;
@@ -316,49 +315,108 @@
    });
    
    /* -------------------------
-      Camera MP
+      Camera MP - controlada (iniciada apenas após interação)
       ------------------------- */
-   const cameraMP = new Camera(video, { onFrame: async () => await hands.send({ image: video }), width: 640, height: 480 });
-   cameraMP.start();
+   let cameraMP = null;
+   let streamRef = null;
+   
+   async function startCameraMP(){
+     // já iniciado?
+     if(cameraMP) return;
+   
+     // tenta obter a stream (precisa de gesture do usuário)
+     try {
+       // escolha de resolução compatível com mobile
+       const constraints = { video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }, audio: false };
+       streamRef = await navigator.mediaDevices.getUserMedia(constraints);
+       video.srcObject = streamRef;
+       // importante: no mobile o atributo playsinline no <video> evita fullscreen automático
+       await video.play().catch(e => { /* iOS/Chrome podem exigir */ });
+   
+       cameraMP = new Camera(video, {
+         onFrame: async () => {
+           // envia o frame ao MediaPipe
+           await hands.send({ image: video }).catch(()=>{});
+         },
+         width: 640,
+         height: 480
+       });
+       cameraMP.start();
+     } catch (err) {
+       console.error("Erro ao iniciar câmera:", err);
+       alert("Não foi possível acessar a câmera. Verifique permissões e tente novamente.");
+       // manter o menu para tentar de novo
+       menu.style.display = 'flex';
+       countdownDiv.style.display = 'none';
+       throw err;
+     }
+   }
+   
+   function stopCameraMP(){
+     try {
+       if(cameraMP) {
+         cameraMP.stop();
+         cameraMP = null;
+       }
+       if(streamRef){
+         const tracks = streamRef.getTracks();
+         tracks.forEach(t => t.stop());
+         streamRef = null;
+       }
+     } catch(e){
+       // ignore
+     }
+   }
    
    /* -------------------------
       Loop de animação
       ------------------------- */
    function gameLoop(){
      requestAnimationFrame(gameLoop);
-     // desenhos já são feitos no hands.onResults para manter sincronia com camera frames
+     // desenho sincronizado em hands.onResults. Aqui podemos desenhar overlay se quiser.
    }
    gameLoop();
    
    /* -------------------------
-      Menu / start / restart
-      ------------------------- */
-     function startGame(){
-     menu.style.display = 'none';
-     countdownDiv.style.display = 'block';
-     let count = 3;
-     countdownDiv.textContent = count;
-     const interval = setInterval(()=>{
-       count--;
-       if(count > 0){
-         countdownDiv.textContent = count;
-       } else {
-         countdownDiv.textContent = 'VAI!';
-         setTimeout(()=>{
-           countdownDiv.style.display = 'none';
-           initBalls();
-         }, 800);
-         clearInterval(interval);
-       }
-     },1000);
-   }
-   
-   startBtn.addEventListener('click', startGame);
-   restartBtn.addEventListener('click', ()=> {
-     gameOverDiv.style.display = 'none';
-     startGame();
-   });
-   
+   Menu / start / restart
+   ------------------------- */
+async function startGame(){
+  // começa a contagem (exige interação do usuário)
+  menu.style.display = 'none';
+  gameOverDiv.style.display = 'none';
+  countdownDiv.style.display = 'block';
+  let count = 3;
+  countdownDiv.textContent = count;
+
+  const interval = setInterval(() => {
+    count--;
+    if (count > 0) {
+      countdownDiv.textContent = count;
+    } else {
+      countdownDiv.textContent = 'VAI!';
+      setTimeout(async () => {
+        countdownDiv.style.display = 'none';
+        try {
+          await startCameraMP(); // inicia câmera se ainda não estiver ativa
+          initBalls();           // reinicia o jogo
+        } catch (e) {
+          console.warn("Câmera não disponível:", e);
+        }
+      }, 600);
+      clearInterval(interval);
+    }
+  }, 1000);
+}
+
+// 🔹 Corrigido: ao clicar em Reiniciar, já inicia nova contagem
+restartBtn.addEventListener('click', () => {
+  gameOverDiv.style.display = 'none';
+  startGame();
+});
+
+// 🔹 Botão Iniciar do menu (primeira vez)
+startBtn.addEventListener('click', startGame);
+
    /* -------------------------
       Resize handler (recalibra arena + mantém cursor)
       ------------------------- */
@@ -368,7 +426,14 @@
      canvas.width = screenWidth;
      canvas.height = screenHeight;
      arena = computeArena();
-     // manter smoothX/smoothY dentro da tela
      smoothX = Math.min(Math.max(smoothX, 0), screenWidth);
      smoothY = Math.min(Math.max(smoothY, 0), screenHeight);
    });
+   
+   /* -------------------------
+      Ajuda para desenvolvimento: pare a câmera ao fechar a aba
+      ------------------------- */
+   window.addEventListener('pagehide', () => {
+     stopCameraMP();
+   });
+   
