@@ -32,7 +32,7 @@ function computeArena(){
     const x = Math.round((screenWidth - w)/2);
     const y = Math.round((screenHeight - h)/2);
     arena = {x,y,w,h};
-    drawArena(); // desenha apenas no arenaLayer
+    drawArena();
 }
 function drawArena(){
     arenaCtx.clearRect(0,0,screenWidth,screenHeight);
@@ -64,15 +64,15 @@ function playExplosion(){
 let particles = [];
 function createParticles(x,y){
   const colors = ['#921919','#923b19','#751010','#925a19','#c31515'];
-   for(let i=0;i<18;i++){ 
+  for(let i=0;i<18;i++){ 
     const angle = Math.random()*2*Math.PI; 
     const speed = Math.random()*3 + 1; 
-      particles.push({ x: x, y: y, dx: Math.cos(angle)*speed, dy: Math.sin(angle)*speed, r: 4 + Math.random()*3, alpha: 1, color: colors[Math.floor(Math.random()*colors.length)] });
-    }
+    particles.push({ x, y, dx: Math.cos(angle)*speed, dy: Math.sin(angle)*speed, r: 4 + Math.random()*3, alpha: 1, color: colors[Math.floor(Math.random()*colors.length)] });
+  }
 }
 function updateParticles(){ 
     particles.forEach(p=>{p.x+=p.dx; p.y+=p.dy; p.alpha-=0.05}); 
-    particles=particles.filter(p=>p.alpha>0);
+    particles = particles.filter(p=>p.alpha>0);
 }
 function drawParticles(){ 
     particles.forEach(p=>{
@@ -99,7 +99,7 @@ function initBalls(){
         const r=15+Math.random()*10;
         const x=arena.x+r+Math.random()*(arena.w-2*r);
         const y=arena.y+r+Math.random()*(arena.h-2*r);
-        const speed=10+Math.random()*1.5;
+        const speed=5+Math.random()*1.5;
         const ang=Math.random()*2*Math.PI;
         balls.push({x,y,r,dx:Math.cos(ang)*speed,dy:Math.sin(ang)*speed,alive:true});
     }
@@ -156,52 +156,60 @@ function endGame(allPopped){
 }
 function updateHUD(time){ hud.innerHTML=`Tempo: ${time}s<br>Bolhas esmagadas: ${score}`; }
 
-// ---------- Cursor (MediaPipe Hands) ----------
-let smoothX=screenWidth/2, smoothY=screenHeight/2, clickFrames=0, lastFrameTime=0;
+// ---------- Cursor ----------
+let smoothX=screenWidth/2, smoothY=screenHeight/2, clickFrames=0, cursorVisible=false;
+let mouseX=screenWidth/2, mouseY=screenHeight/2, clickActive=false;
+
 const hands = new Hands({locateFile:(file)=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
 hands.setOptions({maxNumHands:1,modelComplexity:0,minDetectionConfidence:0.5,minTrackingConfidence:0.5});
 hands.onResults(results=>{
-    ctx.clearRect(0,0,dynamicCanvas.width,dynamicCanvas.height);
-    let mouseX=smoothX, mouseY=smoothY, clickActive=false;
-
+    cursorVisible=false; clickActive=false;
     if(results.multiHandLandmarks?.length>0){
-        const lm=results.multiHandLandmarks[0];
-        let camX=lm[8].x, camY=lm[8].y;
+        cursorVisible=true;
+        const lm = results.multiHandLandmarks[0];
         const margin=0.05;
-        camX=Math.min(Math.max(camX,0-margin),1+margin);
-        camY=Math.min(Math.max(camY,0-margin),1+margin);
+        let camX=Math.min(Math.max(lm[8].x,0-margin),1+margin);
+        let camY=Math.min(Math.max(lm[8].y,0-margin),1+margin);
         mouseX=(1-camX)*screenWidth;
         mouseY=camY*screenHeight;
         smoothX+= (mouseX-smoothX)*0.4; smoothY+=(mouseY-smoothY)*0.4;
+        if(Math.hypot(lm[8].x-lm[4].x,lm[8].y-lm[4].y)<0.06){clickFrames++; if(clickFrames>=5) clickActive=true;} else clickFrames=0;
+    }
+});
 
-        if(Math.hypot(lm[8].x-lm[4].x,lm[8].y-lm[4].y)<0.06){clickFrames++; if(clickFrames>=5) clickActive=true;}
-        else clickFrames=0;
+// ---------- Camera ----------
+const cameraMP = new Camera(video,{ onFrame: async ()=>{ await hands.send({image:video}); }, width:320, height:240 });
+cameraMP.start();
 
+// ---------- Loop principal ----------
+function gameLoop(){
+    requestAnimationFrame(gameLoop);
+
+    // Atualiza tudo independente da mão
+    updateBalls();
+    updateParticles();
+
+    // Limpa camada dinâmica
+    ctx.clearRect(0,0,dynamicCanvas.width,dynamicCanvas.height);
+
+    // Desenha bolinhas e partículas
+    drawBalls();
+    drawParticles();
+
+    // Smash se cursor visível
+    if(cursorVisible) smashBalls(smoothX,smoothY,clickActive);
+
+    // Cursor
+    if(cursorVisible){
         ctx.fillStyle='green';
         ctx.beginPath();
         ctx.arc(smoothX,smoothY,10,0,2*Math.PI);
         ctx.fill();
     }
 
-    smashBalls(smoothX,smoothY,clickActive);
-    updateBalls(); drawBalls();
-    updateParticles(); drawParticles();
+    // HUD
     if(gameRunning) updateHUD(timer);
-});
-
-// ---------- Camera (limitada ~10FPS) ----------
-const cameraMP = new Camera(video,{
-    onFrame: async ()=>{
-        if(performance.now()-lastFrameTime>50){ // 10 FPS
-            lastFrameTime=performance.now();
-            await hands.send({image:video});
-        }
-    }, width:320, height:240
-});
-cameraMP.start();
-
-// ---------- Loop de animação ----------
-function gameLoop(){ requestAnimationFrame(gameLoop); }
+}
 gameLoop();
 
 // ---------- Menu / Start / Restart ----------
