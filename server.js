@@ -63,11 +63,11 @@ function playExplosion(){
 // ---------- Partículas ----------
 let particles = [];
 function createParticles(x,y){
-    const colors=['#f00','#c00','#900'];
-    for(let i=0;i<2;i++){ // apenas 2 partículas
-        const angle=Math.random()*2*Math.PI;
-        const speed=Math.random()*1.2+0.3;
-        particles.push({x,y,dx:Math.cos(angle)*speed,dy:Math.sin(angle)*speed,r:2+Math.random()*2,alpha:1,color:colors[Math.floor(Math.random()*colors.length)]});
+  const colors = ['#921919','#923b19','#751010','#925a19','#c31515'];
+   for(let i=0;i<18;i++){ 
+    const angle = Math.random()*2*Math.PI; 
+    const speed = Math.random()*3 + 1; 
+      particles.push({ x: x, y: y, dx: Math.cos(angle)*speed, dy: Math.sin(angle)*speed, r: 4 + Math.random()*3, alpha: 1, color: colors[Math.floor(Math.random()*colors.length)] });
     }
 }
 function updateParticles(){ 
@@ -99,7 +99,7 @@ function initBalls(){
         const r=15+Math.random()*10;
         const x=arena.x+r+Math.random()*(arena.w-2*r);
         const y=arena.y+r+Math.random()*(arena.h-2*r);
-        const speed=0.5+Math.random()*1.5;
+        const speed=10+Math.random()*1.5;
         const ang=Math.random()*2*Math.PI;
         balls.push({x,y,r,dx:Math.cos(ang)*speed,dy:Math.sin(ang)*speed,alive:true});
     }
@@ -192,7 +192,7 @@ hands.onResults(results=>{
 // ---------- Camera (limitada ~10FPS) ----------
 const cameraMP = new Camera(video,{
     onFrame: async ()=>{
-        if(performance.now()-lastFrameTime>100){ // 10 FPS
+        if(performance.now()-lastFrameTime>50){ // 10 FPS
             lastFrameTime=performance.now();
             await hands.send({image:video});
         }
