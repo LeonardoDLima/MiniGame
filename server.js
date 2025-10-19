@@ -99,7 +99,7 @@ function initBalls(){
         const r=15+Math.random()*10;
         const x=arena.x+r+Math.random()*(arena.w-2*r);
         const y=arena.y+r+Math.random()*(arena.h-2*r);
-        const speed=5+Math.random()*1.5;
+        const speed=1+Math.random()*1.5;
         const ang=Math.random()*2*Math.PI;
         balls.push({x,y,r,dx:Math.cos(ang)*speed,dy:Math.sin(ang)*speed,alive:true});
     }
