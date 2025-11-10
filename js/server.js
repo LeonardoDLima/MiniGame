@@ -46,18 +46,14 @@ computeArena();
 window.addEventListener('resize', computeArena);
 
 // ---------- Som explosão ----------
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const balloonSound = new Audio('sounds/balloon-burst.mp3');
+balloonSound.preload = 'auto';
+
 function playExplosion(){
-  const now = audioCtx.currentTime;
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.type='square';
-  osc.frequency.setValueAtTime(200, now);
-  osc.frequency.exponentialRampToValueAtTime(20, now+0.25);
-  gain.gain.setValueAtTime(0.6, now);
-  gain.gain.exponentialRampToValueAtTime(0.001, now+0.25);
-  osc.connect(gain).connect(audioCtx.destination);
-  osc.start(now); osc.stop(now+0.25);
+  // Clona o áudio para permitir múltiplos sons simultâneos
+  const sound = balloonSound.cloneNode();
+  sound.volume = 0.7;
+  sound.play().catch(e => console.log('Erro ao tocar som:', e));
 }
 
 // ---------- Partículas ----------
@@ -96,18 +92,25 @@ function hexToRgb(hex){
 const TOTAL_BALLS = 10;
 let balls=[], score=0, gameTime=30, gameRunning=false, timer=gameTime, timerInterval;
 
+// Sistema de tempo independente de framerate
+let lastTime = performance.now();
+const FIXED_TIMESTEP = 1000 / 60; // 60 FPS target
+let deltaAccumulator = 0;
+
 function initBalls(){
   balls=[]; particles=[];
   for(let i=0;i<TOTAL_BALLS;i++){
     const r=15+Math.random()*10;
     const x=arena.x+r+Math.random()*(arena.w-2*r);
     const y=arena.y+r+Math.random()*(arena.h-2*r);
-    const speed=2+Math.random()*2;
+    const speed=1+Math.random()*1.5; // Velocidade reduzida (antes era 2+Math.random()*2)
     const ang=Math.random()*2*Math.PI;
     balls.push({x,y,r,dx:Math.cos(ang)*speed,dy:Math.sin(ang)*speed,alive:true});
   }
   score=0; timer=gameTime; gameRunning=true;
   hud.style.display='block'; gameOverDiv.style.display='none';
+  lastTime = performance.now(); // Reset do timer
+  deltaAccumulator = 0; // Limpa o acumulador
   clearInterval(timerInterval);
   timerInterval=setInterval(()=>{
     if(!gameRunning) return;
@@ -117,9 +120,15 @@ function initBalls(){
 }
 
 function updateBalls(){
+  if(!gameRunning) return;
+  
   balls.forEach(b=>{
     if(!b.alive) return;
-    b.x+=b.dx; b.y+=b.dy;
+    // Movimento com timestep fixo
+    b.x+=b.dx;
+    b.y+=b.dy;
+    
+    // Colisão com bordas
     if(b.x-b.r<arena.x){b.x=arena.x+b.r;b.dx*=-1;}
     if(b.x+b.r>arena.x+arena.w){b.x=arena.x+arena.w-b.r;b.dx*=-1;}
     if(b.y-b.r<arena.y){b.y=arena.y+b.r;b.dy*=-1;}
@@ -163,9 +172,100 @@ function updateHUD(time){ hud.innerHTML=`Tempo: ${time}s<br>Bolhas: ${score}`; }
 let handsCooldown = [false, false]; // uma flag por mão
 let smoothHands = [{x:screenWidth/2,y:screenHeight/2},{x:screenWidth/2,y:screenHeight/2}];
 
+// Estado anterior da pinça para detectar transição
+let previousPinchState = [false, false]; // false = dedos separados, true = dedos juntos
+const PINCH_THRESHOLD = 0.07; // Distância para considerar "pinça fechada"
+const PINCH_RELEASE_THRESHOLD = 0.10; // Distância para considerar "pinça aberta" (histerese)
+
+// Buffer para suavização avançada (armazena últimas 5 posições)
+let positionBuffer = [
+  [{x:screenWidth/2, y:screenHeight/2}, {x:screenWidth/2, y:screenHeight/2}, {x:screenWidth/2, y:screenHeight/2}, {x:screenWidth/2, y:screenHeight/2}, {x:screenWidth/2, y:screenHeight/2}],
+  [{x:screenWidth/2, y:screenHeight/2}, {x:screenWidth/2, y:screenHeight/2}, {x:screenWidth/2, y:screenHeight/2}, {x:screenWidth/2, y:screenHeight/2}, {x:screenWidth/2, y:screenHeight/2}]
+];
+
+// Filtro de Kalman simplificado
+let kalmanFilters = [
+  {x: screenWidth/2, y: screenHeight/2, vx: 0, vy: 0},
+  {x: screenWidth/2, y: screenHeight/2, vx: 0, vy: 0}
+];
+
+function applyKalmanFilter(filter, measuredX, measuredY) {
+  const dt = 1; // delta time
+  const processNoise = 0.01; // ruído do processo
+  const measurementNoise = 5; // ruído da medição
+  
+  // Predição
+  filter.x += filter.vx * dt;
+  filter.y += filter.vy * dt;
+  
+  // Atualização (correção baseada na medição)
+  const innovationX = measuredX - filter.x;
+  const innovationY = measuredY - filter.y;
+  
+  const gain = measurementNoise / (measurementNoise + processNoise);
+  
+  filter.x += gain * innovationX;
+  filter.y += gain * innovationY;
+  filter.vx = innovationX * 0.1;
+  filter.vy = innovationY * 0.1;
+  
+  return {x: filter.x, y: filter.y};
+}
+
+function smoothPosition(rawX, rawY, handIndex) {
+  // 1. Adiciona nova posição ao buffer
+  positionBuffer[handIndex].shift();
+  positionBuffer[handIndex].push({x: rawX, y: rawY});
+  
+  // 2. Calcula média ponderada (posições mais recentes têm mais peso)
+  const weights = [0.1, 0.15, 0.2, 0.25, 0.3]; // soma = 1.0
+  let weightedX = 0, weightedY = 0;
+  
+  positionBuffer[handIndex].forEach((pos, i) => {
+    weightedX += pos.x * weights[i];
+    weightedY += pos.y * weights[i];
+  });
+  
+  // 3. Aplica filtro de Kalman
+  const kalmanResult = applyKalmanFilter(kalmanFilters[handIndex], weightedX, weightedY);
+  
+  // 4. Suavização exponencial final
+  smoothHands[handIndex].x += (kalmanResult.x - smoothHands[handIndex].x) * 0.5;
+  smoothHands[handIndex].y += (kalmanResult.y - smoothHands[handIndex].y) * 0.5;
+  
+  return {x: smoothHands[handIndex].x, y: smoothHands[handIndex].y};
+}
+
 const hands = new Hands({locateFile:(f)=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
-hands.setOptions({maxNumHands:2,modelComplexity:0,minDetectionConfidence:0.5,minTrackingConfidence:0.5});
+hands.setOptions({
+  maxNumHands:2,
+  modelComplexity:1, // melhor precisão
+  minDetectionConfidence:0.7, // reduz falsos positivos
+  minTrackingConfidence:0.7 // rastreamento mais estável
+});
+
 hands.onResults(results=>{
+  // Atualização de física independente do MediaPipe
+  const currentTime = performance.now();
+  const deltaTime = currentTime - lastTime;
+  lastTime = currentTime;
+  
+  // Limita o deltaTime para evitar grandes saltos
+  const clampedDelta = Math.min(deltaTime, 100);
+  deltaAccumulator += clampedDelta;
+  
+  // Fixed timestep update (máximo 3 iterações por frame)
+  let updates = 0;
+  while(deltaAccumulator >= FIXED_TIMESTEP && updates < 3) {
+    if(gameRunning) {
+      updateBalls();
+      updateParticles();
+    }
+    deltaAccumulator -= FIXED_TIMESTEP;
+    updates++;
+  }
+  
+  // Renderização
   ctx.clearRect(0,0,dynamicCanvas.width,dynamicCanvas.height);
 
   if (results.multiHandLandmarks?.length) {
@@ -190,44 +290,75 @@ hands.onResults(results=>{
       const margin = 0.05;
       let camX = Math.min(Math.max(lm[8].x, 0 - margin), 1 + margin);
       let camY = Math.min(Math.max(lm[8].y, 0 - margin), 1 + margin);
-      const mouseX = (1 - camX) * screenWidth;
-      const mouseY = camY * screenHeight;
+      const rawX = (1 - camX) * screenWidth;
+      const rawY = camY * screenHeight;
   
-      // Suavização de movimento
-      smoothHands[i].x += (mouseX - smoothHands[i].x) * 0.4;
-      smoothHands[i].y += (mouseY - smoothHands[i].y) * 0.4;
+      // Aplica suavização avançada
+      const smoothed = smoothPosition(rawX, rawY, i);
   
-      // Desenha cursor
-      ctx.fillStyle = 'lime';
-      ctx.beginPath();
-      ctx.arc(smoothHands[i].x, smoothHands[i].y, 10, 0, 2 * Math.PI);
-      ctx.fill();
-  
-      // Detecta gesto de pinça
+      // Calcula distância entre polegar e indicador
       const dist = Math.hypot(lm[8].x - lm[4].x, lm[8].y - lm[4].y);
-      if (dist < 0.07 && !handsCooldown[i]) {
-        handsCooldown[i] = true;
-        smashBalls(smoothHands[i].x, smoothHands[i].y);
-        setTimeout(() => (handsCooldown[i] = false), 300);
+      
+      // Determina estado atual da pinça com histerese
+      let currentPinchClosed;
+      if (previousPinchState[i]) {
+        // Se estava fechada, precisa abrir mais para mudar estado
+        currentPinchClosed = dist < PINCH_RELEASE_THRESHOLD;
+      } else {
+        // Se estava aberta, precisa fechar mais para mudar estado
+        currentPinchClosed = dist < PINCH_THRESHOLD;
+      }
+      
+      // Detecta TRANSIÇÃO de aberto → fechado (momento do clique)
+      const justPinched = !previousPinchState[i] && currentPinchClosed;
+      
+      if (justPinched) {
+        smashBalls(smoothed.x, smoothed.y);
+      }
+      
+      // Atualiza estado anterior
+      previousPinchState[i] = currentPinchClosed;
+      
+      // Desenha cursor com feedback visual do estado da pinça
+      if (currentPinchClosed) {
+        // Cursor vermelho quando pinça está fechada
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.4)';
+        ctx.beginPath();
+        ctx.arc(smoothed.x, smoothed.y, 15, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        ctx.fillStyle = '#ff3333';
+        ctx.beginPath();
+        ctx.arc(smoothed.x, smoothed.y, 8, 0, 2 * Math.PI);
+        ctx.fill();
+      } else {
+        // Cursor verde quando pinça está aberta
+        ctx.fillStyle = 'rgba(0, 255, 0, 0.3)';
+        ctx.beginPath();
+        ctx.arc(smoothed.x, smoothed.y, 15, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        ctx.fillStyle = 'lime';
+        ctx.beginPath();
+        ctx.arc(smoothed.x, smoothed.y, 8, 0, 2 * Math.PI);
+        ctx.fill();
       }
     });
   }
   
-
-  updateBalls();
+  // Desenha sempre (independente de detecção)
   drawBalls();
-  updateParticles();
   drawParticles();
   if(gameRunning) updateHUD(timer);
 });
 
 // ---------- Camera ----------
-const cameraMP = new Camera(video,{onFrame: async()=>{await hands.send({image:video});}, width:320, height:240});
+const cameraMP = new Camera(video,{
+  onFrame: async()=>{await hands.send({image:video});}, 
+  width:640, 
+  height:480
+});
 cameraMP.start();
-
-// ---------- Loop de animação ----------
-function gameLoop(){ requestAnimationFrame(gameLoop); }
-gameLoop();
 
 // ---------- Menu / Start / Restart ----------
 function startGame(){
